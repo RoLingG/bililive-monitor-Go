@@ -55,7 +55,7 @@ lutou/
 │   ├── index.html      # 页面结构：配置页 + 监听面板
 │   ├── src/
 │   │   ├── main.js     # 前端逻辑：事件监听、卡片渲染、模式管理、配置记忆
-│   │   └── style.css   # 样式：DEADLOCK 神秘学主题
+│   │   └── style.css   # 样式：前端样式
 │   └── wailsjs/        # Wails 自动生成的 JS 绑定
 └── wails.json          # Wails 项目配置
 ```
