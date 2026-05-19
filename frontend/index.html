@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>bili直播监听器</title>
+</head>
+<body>
+
+<div class="title-area">
+    <h1>bili直播监听器</h1>
+    <div class="title-divider">
+        <span class="occult-symbol">⛧</span>
+    </div>
+</div>
+
+<!-- 配置输入 -->
+<div id="setupScreen" class="screen active">
+    <div class="setup-container">
+        <div class="setup-card">
+            <div class="setup-label">监听模式</div>
+            <div class="mode-toggle">
+                <button class="mode-btn active" data-mode="normal" onclick="switchMode('normal')">正常模式</button>
+                <button class="mode-btn" data-mode="vod" onclick="switchMode('vod')">点播模式</button>
+            </div>
+            <div id="modeHint" class="mode-hint">仅显示包含 BV 号的醒目留言</div>
+
+            <div class="setup-label">直播间号</div>
+            <input id="inputRoomId" class="setup-input room-input" type="text" placeholder="例: 1163043" maxlength="12" />
+
+            <div class="setup-label">Cookie</div>
+            <textarea id="inputCookie" class="setup-input setup-textarea" placeholder="从浏览器复制完整 Cookie 粘贴到此处..." rows="5"></textarea>
+
+            <button id="btnStart" class="setup-btn" onclick="handleStart()">启 动 监 听</button>
+
+            <div id="setupError" class="setup-error"></div>
+        </div>
+
+        <div class="setup-hint">
+            打开 B站直播间 → <code>F12</code> → 网络面板 → 随便点一个请求 → 复制 <code>Cookie</code> 请求头的值
+        </div>
+    </div>
+</div>
+
+<!-- 监听面板 -->
+<div id="monitorScreen" class="screen">
+    <!-- 连接状态 - 固定右上角 -->
+    <div class="connection-status status-disconnected" id="connectionStatus">● 未连接</div>
+
+    <div class="monitor-layout">
+        <!-- 左栏：醒目留言 -->
+        <div class="panel-left">
+            <div class="section-header">
+                <h1 class="section-title">▾ 醒目留言</h1>
+                <span class="sc-count" id="scCount">LIVE</span>
+                <div class="monitor-mode-toggle">
+                    <button class="mode-btn-sm active" data-mode="normal" onclick="switchMode('normal')">正常</button>
+                    <button class="mode-btn-sm" data-mode="vod" onclick="switchMode('vod')">点播</button>
+                </div>
+            </div>
+            <div class="sc-list" id="scList">
+                <div class="empty">
+                    <div class="empty-symbol">⊕</div>
+                    <div class="empty-text">等待醒目留言…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右栏：上舰 + 礼物 -->
+        <div class="panel-right">
+            <!-- 右上：上舰 -->
+            <div class="panel-right-section">
+                <div class="section-header guard-header-row">
+                    <h1 class="section-title">▾ 上舰</h1>
+                </div>
+                <div class="sc-list guard-list" id="guardList">
+                    <div class="empty">
+                        <div class="empty-symbol">⚓</div>
+                        <div class="empty-text">等待上舰…</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右下：礼物 -->
+            <div class="panel-right-section">
+                <div class="section-header gift-header-row">
+                    <h1 class="section-title">▾ 礼物</h1>
+                </div>
+                <div class="sc-list gift-list" id="giftList">
+                    <div class="empty">
+                        <div class="empty-symbol">🎁</div>
+                        <div class="empty-text">等待礼物…</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
