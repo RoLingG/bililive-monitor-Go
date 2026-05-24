@@ -5,3 +5,7 @@
 export function StartListening(arg1, arg2) {
   return window['go']['main']['App']['StartListening'](arg1, arg2);
 }
+
+export function StopListening() {
+  return window['go']['main']['App']['StopListening']();
+}

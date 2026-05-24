@@ -1,7 +1,6 @@
 import './style.css';
-import './app.css';
 
-import {StartListening} from '../wailsjs/go/main/App';
+import {StartListening, StopListening} from '../wailsjs/go/main/App';
 import {EventsOn, EventsOffAll} from '../wailsjs/runtime/runtime';
 
 // 模式管理
@@ -16,6 +15,7 @@ const giftData      = [];
 
 // BV 号匹配正则
 const bvRegex = /bv[a-z0-9]+/i;
+const avRegex = /av[a-z0-9]+/i;
 
 function switchMode(mode) {
     if (currentMode === mode) return;
@@ -88,6 +88,29 @@ document.getElementById('inputRoomId').addEventListener('keydown', (e) => {
 // 暴露到 window 供 onclick="handleStart()" 使用
 window.handleStart = handleStart;
 
+// 断开连接，回到配置页
+async function handleDisconnect() {
+    await StopListening();
+    // 重置数据
+    normalScData.length = 0;
+    vodScData.length = 0;
+    guardData.length = 0;
+    giftData.length = 0;
+    // 回到配置页
+    document.getElementById('monitorScreen').classList.remove('active');
+    document.getElementById('setupScreen').classList.add('active');
+    document.getElementById('btnStart').disabled = false;
+    document.getElementById('btnStart').textContent = '启 动 监 听';
+    // 重置模式
+    currentMode = 'normal';
+    document.querySelectorAll('.mode-btn, .mode-btn-sm').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === 'normal');
+    });
+    document.getElementById('modeHint').style.display = 'none';
+    document.querySelector('.monitor-layout').classList.remove('vod-mode');
+}
+window.handleDisconnect = handleDisconnect;
+
 // 本地存储：记住上次输入的 roomId 和 Cookie
 function restoreSavedInputs() {
     const savedRoom = localStorage.getItem('lutou_roomId');
@@ -112,6 +135,7 @@ EventsOn('superchat', (data) => {
     try {
         const sc = JSON.parse(data);
         const isBv = bvRegex.test(sc.message || '');
+        const isAv = avRegex.test(sc.message || '');
 
         // 始终存入正常模式数据
         normalScData.unshift(sc);
@@ -121,14 +145,18 @@ EventsOn('superchat', (data) => {
         if (isBv) {
             vodScData.unshift(sc);
             if (vodScData.length > MAX_ITEMS) vodScData.pop();
+        } else if (isAv) {
+            vodScData.unshift(sc);
+            if (vodScData.length > MAX_ITEMS) vodScData.pop();
         }
 
         // 根据当前模式决定是否渲染到 DOM
         if (currentMode === 'normal') {
             appendScCard(sc);
-        } else if (isBv) {
+        } else if (isBv || isAv) {
             appendScCard(sc);
         }
+
     } catch (e) {
         console.error('解析 SC 数据失败:', e);
     }
@@ -178,6 +206,22 @@ EventsOn('connection-status', (data) => {
     }
 });
 
+EventsOn('live-status', (data) => {
+    try {
+        updateLiveStatus(data.live);
+    } catch (e) {
+        console.error('开播状态更新失败:', e);
+    }
+});
+
+EventsOn('room-info', (data) => {
+    try {
+        updateRoomInfo(data.roomId);
+    } catch (e) {
+        console.error('房间信息更新失败:', e);
+    }
+});
+
 // 模式渲染：切换模式时重新渲染整个列表（带淡入淡出）
 function renderCurrentMode() {
     const layout = document.querySelector('.monitor-layout');
@@ -209,11 +253,16 @@ function renderCurrentMode() {
 function renderScList(data) {
     const list = document.getElementById('scList');
     list.innerHTML = '';
-    if (data.length === 0) {
-        list.innerHTML = '<div class="empty"><div class="empty-symbol">⊕</div><div class="empty-text">等待醒目留言…</div></div>';
+    const filtered = searchQuery
+        ? data.filter(sc => (sc.uname || '').toLowerCase().includes(searchQuery) || (sc.message || '').toLowerCase().includes(searchQuery))
+        : data;
+    if (filtered.length === 0) {
+        list.innerHTML = searchQuery
+            ? '<div class="empty"><div class="empty-symbol">⊘</div><div class="empty-text">无匹配结果…</div></div>'
+            : '<div class="empty"><div class="empty-symbol">⊕</div><div class="empty-text">等待醒目留言…</div></div>';
         return;
     }
-    for (const sc of data) {
+    for (const sc of filtered) {
         const card = createScCard(sc);
         list.appendChild(card);
     }
@@ -265,9 +314,12 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// 将文本中的 BV 号转为可点击链接（传入已转义的文本）
+// 将文本中的 BV/AV 号转为可点击链接
 function linkifyBv(text) {
     return text.replace(bvRegex, (match) => {
+        const href = 'https://www.bilibili.com/video/' + match;
+        return `<a href="${href}" target="_blank" rel="noopener" style="color:var(--teal);text-decoration:underline;cursor:pointer;">${match}</a>`;
+    }).replace(avRegex, (match) => {
         const href = 'https://www.bilibili.com/video/' + match;
         return `<a href="${href}" target="_blank" rel="noopener" style="color:var(--teal);text-decoration:underline;cursor:pointer;">${match}</a>`;
     });
@@ -280,11 +332,14 @@ function guardLabel(level) {
     return '';
 }
 
+// SC 档位背景色
 function priceTier(price) {
-    if (price >= 2000) return '#e8b84a';
-    if (price >= 1000) return '#d4a040';
-    if (price >= 300)  return '#c9a227';
-    return '#a07e1a';
+    if (price >= 2000) return '#7a1515';
+    if (price >= 1000) return '#cc2020';
+    if (price >= 500)  return '#b07a18';
+    if (price >= 100)  return '#8a6d1a';
+    if (price >= 50)   return '#2a4a60';
+    return '#1a2e4a';
 }
 
 // 渲染 SC 卡片
@@ -292,22 +347,23 @@ function createScCard(sc) {
     const card = document.createElement('div');
     card.className = 'sc-card';
 
+    const tierColor = priceTier(sc.price);
+
     if (sc.backgroundImage) {
         card.classList.add('has-bg');
         card.style.backgroundImage = `url(${sc.backgroundImage})`;
+        card.style.backgroundColor = tierColor;
     } else {
-        card.style.backgroundColor = sc.backgroundColor || '#0c1412';
+        card.style.backgroundColor = tierColor;
     }
 
-    const faceUrl    = sc.face || '';
-    const priceText  = formatPrice(sc.price);
-    const priceColor = priceTier(sc.price);
-    const unameHtml  = escapeHtml(sc.uname || '未知用户');
-    const guardText  = guardLabel(sc.guardLevel);
-    const guardHtml  = guardText ? `<span class="sc-guard guard-${sc.guardLevel}">${guardText}</span>` : '';
-    const medalHtml  = (sc.medalName && sc.medalLevel != null)
+    const faceUrl = sc.face || '';
+    const priceText = formatPrice(sc.price);
+    const unameHtml = escapeHtml(sc.uname || '未知用户');
+    const guardText = guardLabel(sc.guardLevel);
+    const guardHtml = guardText ? `<span class="sc-guard guard-${sc.guardLevel}">${guardText}</span>` : '';
+    const medalHtml = (sc.medalName && sc.medalLevel != null)
         ? `<span class="sc-medal">${escapeHtml(sc.medalName)} Lv.${sc.medalLevel}</span>` : '';
-    const msgColor   = sc.messageFontColor || 'rgba(212, 207, 197, 0.9)';
 
     card.innerHTML = `
         <div class="sc-content">
@@ -322,10 +378,10 @@ function createScCard(sc) {
                     </div>
                     ${medalHtml}
                 </div>
-                <span class="sc-price" style="color:${priceColor}">¥${priceText}</span>
+                <span class="sc-price" style="color:#c9a227">¥${priceText}</span>
             </div>
             <div class="sc-divider">◇ ◆ ◇</div>
-            <div class="sc-message" style="color:${msgColor}">${currentMode === 'vod' ? linkifyBv(escapeHtml(sc.message || '')) : escapeHtml(sc.message || '')}</div>
+            <div class="sc-message">${currentMode === 'vod' ? linkifyBv(escapeHtml(sc.message || '')) : escapeHtml(sc.message || '')}</div>
             <div class="sc-footer">${formatTime(sc.startTime)}</div>
         </div>
     `;
@@ -443,3 +499,187 @@ function updateConnectionStatus(info) {
         el.classList.add('status-disconnected');
     }
 }
+
+// 开播状态更新
+function updateLiveStatus(isLive) {
+    const el = document.getElementById('scCount');
+    if (!el) return;
+
+    el.classList.remove('status-live', 'status-offline');
+    if (isLive) {
+        el.textContent = 'LIVE';
+        el.classList.add('status-live');
+    } else {
+        el.textContent = 'OFFLINE';
+        el.classList.add('status-offline');
+    }
+}
+
+// 房间信息更新
+function updateRoomInfo(roomId) {
+    const el = document.getElementById('roomInfo');
+    if (!el) return;
+    el.textContent = '房间 ' + roomId;
+}
+
+// 数据导出
+function exportData(type) {
+    let data, filename;
+    const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+    if (type === 'sc') {
+        data = normalScData.map(sc => ({
+            time: formatTime(sc.startTime),
+            user: sc.uname,
+            price: sc.price,
+            message: sc.message,
+            face: sc.face || '',
+            medal: sc.medalName ? sc.medalName + ' Lv.' + sc.medalLevel : '',
+        }));
+        filename = `sc-${ts}.json`;
+    } else if (type === 'guard') {
+        data = guardData.map(g => ({
+            time: formatTime(g.startTime),
+            user: g.username,
+            level: guardLabel(g.guardLevel),
+            price: g.price / 100,
+            gift: g.giftName,
+        }));
+        filename = `guard-${ts}.json`;
+    } else if (type === 'gift') {
+        data = giftData.map(g => ({
+            user: g.uname,
+            gift: g.giftName,
+            num: g.num,
+            price: g.totalCoin / 1000,
+            comboId: g.comboId,
+            face: g.face || '',
+        }));
+        filename = `gift-${ts}.json`;
+    }
+    if (!data || data.length === 0) return;
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+window.exportData = exportData;
+
+// 数据导入
+function importData(type) {
+    const input = document.getElementById('import' + type.charAt(0).toUpperCase() + type.slice(1));
+    if (input) input.click();
+}
+window.importData = importData;
+
+function handleImportFile(type) {
+    const input = document.getElementById('import' + type.charAt(0).toUpperCase() + type.slice(1));
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        try {
+            const data = JSON.parse(String(e.target.result));
+            if (!Array.isArray(data) || data.length === 0) return;
+
+            let added = 0;
+
+            if (type === 'sc') {
+                for (const item of data) {
+                    const isDup = normalScData.some(sc =>
+                        (sc.uname || sc.user) === item.user
+                        && sc.message === item.message
+                        && sc.price === item.price
+                        && formatTime(sc.startTime) === item.time
+                    );
+                    if (isDup) continue;
+
+                    const sc = {
+                        price: item.price,
+                        uname: item.user,
+                        message: item.message,
+                        startTime: 0,
+                        face: item.face || '',
+                        guardLevel: 0,
+                        medalName: item.medal ? item.medal.split(' Lv.')[0] : '',
+                        medalLevel: item.medal ? parseInt(item.medal.split(' Lv.')[1]) || 0 : 0,
+                    };
+                    normalScData.unshift(sc);
+                    if (normalScData.length > MAX_ITEMS) normalScData.pop();
+
+                    const isBv = bvRegex.test(sc.message || '');
+                    const isAv = avRegex.test(sc.message || '');
+                    if (isBv || isAv) {
+                        vodScData.unshift(sc);
+                        if (vodScData.length > MAX_ITEMS) vodScData.pop();
+                    }
+                    added++;
+                }
+            } else if (type === 'guard') {
+                for (const item of data) {
+                    const isDup = guardData.some(g =>
+                        g.username === item.user
+                        && g.giftName === item.gift
+                        && g.price / 100 === item.price
+                        && formatTime(g.startTime) === item.time
+                    );
+                    if (isDup) continue;
+
+                    guardData.unshift({
+                        username: item.user,
+                        guardLevel: item.level === '总督' ? 1 : item.level === '提督' ? 2 : 3,
+                        price: item.price * 100,
+                        giftName: item.gift,
+                        startTime: 0,
+                    });
+                    if (guardData.length > MAX_ITEMS) guardData.pop();
+                    added++;
+                }
+            } else if (type === 'gift') {
+                for (const item of data) {
+                    const isDup = giftData.some(g =>
+                        g.uname === item.user
+                        && g.giftName === item.gift
+                        && g.num === item.num
+                        && g.totalCoin / 1000 === item.price
+                    );
+                    if (isDup) continue;
+
+                    giftData.unshift({
+                        comboId: item.comboId || '',
+                        uname: item.user,
+                        giftName: item.gift,
+                        num: item.num,
+                        totalCoin: item.price * 1000,
+                        face: item.face || '',
+                    });
+                    if (giftData.length > MAX_ITEMS) giftData.pop();
+                    added++;
+                }
+            }
+
+            renderCurrentMode();
+            if (added > 0) {
+                alert('导入成功，新增 ' + added + ' 条记录');
+            } else {
+                alert('没有新数据（可能已全部导入过）');
+            }
+        } catch (err) {
+            alert('导入失败：文件格式不正确');
+        }
+    };
+    reader.readAsText(file);
+    input.value = '';
+}
+window.handleImportFile = handleImportFile;
+
+// SC 搜索
+let searchQuery = '';
+function handleSearch(e) {
+    searchQuery = e.target.value.trim().toLowerCase();
+    renderScList(currentMode === 'vod' ? vodScData : normalScData);
+}
+window.handleSearch = handleSearch;

@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Akegarasu/blivedm-go/api"
 	"github.com/Akegarasu/blivedm-go/client"
 	"github.com/Akegarasu/blivedm-go/message"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -24,11 +25,13 @@ type comboState struct {
 // App struct
 type App struct {
 	ctx            context.Context
+	biliClient     *client.Client
 	combos         map[string]*comboState // key: batch_combo_id
 	fallbackCombos map[string]*comboState // key: uid_giftId（BatchComboId 为空时的备用追踪）
 	mu             sync.Mutex
-	connected      atomic.Bool  // 当前连接状态
-	lastBeat       atomic.Int64 // 最后一次心跳/事件时间戳（Unix 秒）
+	connected      atomic.Bool        // 当前连接状态
+	lastBeat       atomic.Int64       // 最后一次心跳/事件时间戳（Unix 秒）
+	cancelMonitor  context.CancelFunc // 停止 connectionMonitor 的取消函数
 }
 
 // NewApp creates a new App application struct
@@ -47,6 +50,8 @@ func (a *App) startup(ctx context.Context) {
 
 // StartListening 启动SC监听 — 前端传入直播间号和Cookie
 func (a *App) StartListening(roomIdStr string, cookie string) error {
+	// 防止重复连接
+	a.StopListening()
 	roomId, err := strconv.Atoi(roomIdStr)
 	if err != nil || roomId <= 0 {
 		return fmt.Errorf("直播间号格式错误")
@@ -71,14 +76,51 @@ func (a *App) StartListening(roomIdStr string, cookie string) error {
 		"message": "",
 	})
 
-	go a.connectionMonitor()
+	// 获取初始开播状态
+	if roomInfo, err := api.GetRoomInfo(roomId); err == nil {
+		runtime.EventsEmit(a.ctx, "live-status", map[string]interface{}{
+			"live": roomInfo.Data.LiveStatus == 1,
+		})
+	}
+
+	// 推送房间号给前端
+	runtime.EventsEmit(a.ctx, "room-info", map[string]interface{}{
+		"roomId": roomId,
+	})
+
+	monitorCtx, monitorCancel := context.WithCancel(context.Background())
+	a.cancelMonitor = monitorCancel
+	go a.connectionMonitor(monitorCtx)
 	return nil
+}
+
+// StopListening 断开连接，回到配置页
+func (a *App) StopListening() {
+	if a.biliClient != nil {
+		a.biliClient.Stop()
+		a.biliClient = nil
+	}
+	if a.cancelMonitor != nil {
+		a.cancelMonitor()
+		a.cancelMonitor = nil
+	}
+	a.connected.Store(false)
+	a.mu.Lock()
+	a.combos = make(map[string]*comboState)
+	a.fallbackCombos = make(map[string]*comboState)
+	a.mu.Unlock()
+
+	runtime.EventsEmit(a.ctx, "connection-status", map[string]interface{}{
+		"status":  "disconnected",
+		"message": "",
+	})
 }
 
 // startBiliClient 开启blivedm客户端并监听SC、Guard、Gift事件
 func (a *App) startBiliClient(roomId int, cookie string) error {
 	c := client.NewClient(roomId)
 	c.SetCookie(cookie)
+	a.biliClient = c
 
 	// --- 醒目留言 (SC) ---
 	c.OnSuperChat(func(superChat *message.SuperChat) {
@@ -223,12 +265,18 @@ func (a *App) startBiliClient(roomId int, cookie string) error {
 		})
 	}
 
-	// 开播/下播事件也作为心跳
+	// 开播/下播事件也作为心跳，并推送开播状态给前端
 	c.OnLiveStart(func(start *message.LiveStart) {
 		a.touchBeat()
+		runtime.EventsEmit(a.ctx, "live-status", map[string]interface{}{
+			"live": true,
+		})
 	})
 	c.OnLiveStop(func(start *message.LiveStop) {
 		a.touchBeat()
+		runtime.EventsEmit(a.ctx, "live-status", map[string]interface{}{
+			"live": false,
+		})
 	})
 
 	// 启动 client，返回 error
@@ -243,43 +291,46 @@ func (a *App) touchBeat() {
 // connectionMonitor 监控连接状态，检测断连和重连
 // 每 15 秒检查一次，如果超过 120 秒没有收到任何广播事件，认为连接已断开
 // blivedm-go client 会自动重连，重连成功后会重新收到广播事件
-func (a *App) connectionMonitor() {
+func (a *App) connectionMonitor(cancelCtx context.Context) {
 	const checkInterval = 15 * time.Second
 	const timeout = 120 * time.Second
 	wasConnected := true
 
 	for {
-		time.Sleep(checkInterval)
+		select {
+		case <-cancelCtx.Done():
+			return
+		case <-time.After(checkInterval):
+			lastBeat := time.Unix(a.lastBeat.Load(), 0)
+			elapsed := time.Since(lastBeat)
 
-		lastBeat := time.Unix(a.lastBeat.Load(), 0)
-		elapsed := time.Since(lastBeat)
+			if elapsed > timeout {
+				// 连接超时，标记为断开
+				if wasConnected {
+					wasConnected = false
+					a.connected.Store(false)
 
-		if elapsed > timeout {
-			// 连接超时，标记为断开
-			if wasConnected {
-				wasConnected = false
-				a.connected.Store(false)
+					// 清空 combo 状态（重连后连击信息已失效）
+					a.mu.Lock()
+					a.combos = make(map[string]*comboState)
+					a.fallbackCombos = make(map[string]*comboState)
+					a.mu.Unlock()
 
-				// 清空 combo 状态（重连后连击信息已失效）
-				a.mu.Lock()
-				a.combos = make(map[string]*comboState)
-				a.fallbackCombos = make(map[string]*comboState)
-				a.mu.Unlock()
-
-				runtime.EventsEmit(a.ctx, "connection-status", map[string]interface{}{
-					"status":  "reconnecting",
-					"message": "",
-				})
-			}
-		} else {
-			// 连接正常（或已恢复）
-			if !wasConnected {
-				wasConnected = true
-				a.connected.Store(true)
-				runtime.EventsEmit(a.ctx, "connection-status", map[string]interface{}{
-					"status":  "connected",
-					"message": "",
-				})
+					runtime.EventsEmit(a.ctx, "connection-status", map[string]interface{}{
+						"status":  "reconnecting",
+						"message": "",
+					})
+				}
+			} else {
+				// 连接正常（或已恢复）
+				if !wasConnected {
+					wasConnected = true
+					a.connected.Store(true)
+					runtime.EventsEmit(a.ctx, "connection-status", map[string]interface{}{
+						"status":  "connected",
+						"message": "",
+					})
+				}
 			}
 		}
 	}

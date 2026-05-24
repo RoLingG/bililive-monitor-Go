@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -17,6 +18,9 @@ var assets embed.FS
 func main() {
 	// Create an instance of the app structure
 	app := NewApp()
+
+	// Create avatar client with timeout
+	avatarClient := &http.Client{Timeout: 10 * time.Second}
 
 	// Create application with options
 	err := wails.Run(&options.App{
@@ -45,7 +49,7 @@ func main() {
 						}
 						req.Header.Set("Referer", "https://www.bilibili.com/")
 						req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-						resp, err := http.DefaultClient.Do(req)
+						resp, err := avatarClient.Do(req)
 						if err != nil {
 							http.NotFound(w, r)
 							return

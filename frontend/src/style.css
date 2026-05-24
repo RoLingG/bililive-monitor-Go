@@ -300,6 +300,8 @@ body {
     padding: 20px;
     height: 100vh;
     overflow: hidden;
+    transition: gap 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
 }
 .panel-left {
     flex: 6;
@@ -526,7 +528,7 @@ body {
 .section-header {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     margin: 0 0 10px;
     padding-bottom: 6px;
     border-bottom: 1px solid var(--divider);
@@ -544,14 +546,34 @@ body {
 .sc-count {
     font-family: var(--serif);
     font-size: 10px;
-    padding: 2px 10px;
+    padding: 2px 6px;
     border-radius: 1px;
     font-weight: 700;
     letter-spacing: 2px;
+}
+.sc-count.status-live {
+    color: #4caf50;
+    background: rgba(76,175,80,0.12);
+    border: 1px solid rgba(76,175,80,0.2);
+    animation: livePulse 2s ease-in-out infinite;
+}
+.sc-count.status-offline {
     color: #e06060;
     background: rgba(224,96,96,0.12);
     border: 1px solid rgba(224,96,96,0.2);
-    animation: livePulse 2s ease-in-out infinite;
+}
+
+/* 房间信息 */
+.room-info {
+    font-family: var(--serif);
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 1px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    background: rgba(107,122,110,0.08);
+    border: 1px solid rgba(107,122,110,0.15);
 }
 @keyframes livePulse {
     0%, 100% { opacity: 1; }
@@ -560,18 +582,100 @@ body {
 
 /* 连接状态 */
 .connection-status {
-    position: fixed;
+    position: absolute;
     top: 12px;
-    right: 20px;
-    z-index: 100;
+    left: 20px;
     font-family: var(--serif);
     font-size: 12px;
     letter-spacing: 1px;
+    flex-shrink: 0;
 }
 .status-connected    { color: #4caf50; }
 .status-error        { color: #e06060; }
 .status-disconnected { color: var(--text-dim); }
 .status-reconnecting { color: #ff9800; animation: livePulse 2s ease-in-out infinite; }
+
+/* 断开连接按钮 */
+.disconnect-btn {
+    position: absolute;
+    top: 12px;
+    right: 20px;
+    z-index: 100;
+    font-family: var(--serif);
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding: 4px 12px;
+    background: transparent;
+    border: 1px solid rgba(224,96,96,0.3);
+    color: #e06060;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+.disconnect-btn:hover {
+    background: rgba(224,96,96,0.12);
+    border-color: rgba(224,96,96,0.5);
+}
+
+/* SC 搜索框 */
+.sc-search {
+    margin-left: 0px;
+    width: 120px;
+    padding: 3px 8px;
+    font-family: var(--sans);
+    font-size: 11px;
+    background: rgba(7, 11, 10, 0.6);
+    border: 1px solid rgba(45, 212, 168, 0.12);
+    color: var(--text-main);
+    border-radius: 2px;
+    outline: none;
+    transition: border-color 0.3s;
+}
+.sc-search:focus {
+    border-color: rgba(45, 212, 168, 0.3);
+}
+.sc-search::placeholder {
+    color: var(--text-dim);
+    font-size: 10px;
+}
+
+/* 导出按钮 */
+.export-btn {
+    padding: 3px 8px;
+    font-family: var(--serif);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    background: transparent;
+    border: 1px solid rgba(45, 212, 168, 0.15);
+    color: var(--text-dim);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+.export-btn:hover {
+    background: rgba(45, 212, 168, 0.08);
+    color: var(--teal);
+    border-color: rgba(45, 212, 168, 0.3);
+}
+.import-btn {
+    padding: 3px 8px;
+    font-family: var(--serif);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    background: transparent;
+    border: 1px solid rgba(136, 136, 136, 0.15);
+    color: var(--text-dim);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+.import-btn:hover {
+    background: rgba(136, 136, 136, 0.08);
+    color: #aaa;
+    border-color: rgba(136, 136, 136, 0.3);
+}
 
 /* 上舰卡片 */
 .guard-card {
@@ -777,14 +881,6 @@ body {
 .guard-list { }
 .gift-list  { }
 
-/* 点播模式布局 + 切换动画 */
-.panel-right {
-    overflow: auto;
-    max-height: 100%;
-    opacity: 1;
-    transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-                opacity 0.3s ease;
-}
 .monitor-layout.vod-mode .panel-right {
     max-height: 0;
     opacity: 0;
@@ -802,10 +898,6 @@ body {
     opacity: 0;
 }
 
-/* 模式切换时整体布局过渡 */
-.monitor-layout {
-    transition: gap 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
 .monitor-layout.vod-mode {
     gap: 0;
 }

@@ -44,15 +44,17 @@
 
 <!-- 监听面板 -->
 <div id="monitorScreen" class="screen">
-    <!-- 连接状态 - 固定右上角 -->
-    <div class="connection-status status-disconnected" id="connectionStatus">● 未连接</div>
-
     <div class="monitor-layout">
         <!-- 左栏：醒目留言 -->
         <div class="panel-left">
             <div class="section-header">
                 <h1 class="section-title">▾ 醒目留言</h1>
-                <span class="sc-count" id="scCount">LIVE</span>
+                <span class="sc-count status-offline" id="scCount">OFFLINE</span>
+                <span class="room-info" id="roomInfo"></span>
+                <input class="sc-search" type="text" placeholder="搜索 SC..." oninput="handleSearch(event)" />
+                <button class="export-btn" onclick="exportData('sc')">导出</button>
+                <button class="import-btn" onclick="importData('sc')">导入</button>
+                <input type="file" id="importSc" accept=".json" style="display:none" onchange="handleImportFile('sc')" />
                 <div class="monitor-mode-toggle">
                     <button class="mode-btn-sm active" data-mode="normal" onclick="switchMode('normal')">正常</button>
                     <button class="mode-btn-sm" data-mode="vod" onclick="switchMode('vod')">点播</button>
@@ -72,6 +74,9 @@
             <div class="panel-right-section">
                 <div class="section-header guard-header-row">
                     <h1 class="section-title">▾ 上舰</h1>
+                    <button class="export-btn" onclick="exportData('guard')">导出</button>
+                    <button class="import-btn" onclick="importData('guard')">导入</button>
+                    <input type="file" id="importGuard" accept=".json" style="display:none" onchange="handleImportFile('guard')" />
                 </div>
                 <div class="sc-list guard-list" id="guardList">
                     <div class="empty">
@@ -85,6 +90,9 @@
             <div class="panel-right-section">
                 <div class="section-header gift-header-row">
                     <h1 class="section-title">▾ 礼物</h1>
+                    <button class="export-btn" onclick="exportData('gift')">导出</button>
+                    <button class="import-btn" onclick="importData('gift')">导入</button>
+                    <input type="file" id="importGift" accept=".json" style="display:none" onchange="handleImportFile('gift')" />
                 </div>
                 <div class="sc-list gift-list" id="giftList">
                     <div class="empty">
@@ -95,6 +103,8 @@
             </div>
         </div>
     </div>
+    <span class="connection-status status-disconnected" id="connectionStatus">● 未连接</span>
+    <button class="disconnect-btn" onclick="handleDisconnect()">断开连接</button>
 </div>
 <script type="module" src="/src/main.js"></script>
 </body>
