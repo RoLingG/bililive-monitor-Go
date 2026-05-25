@@ -24,14 +24,13 @@ B站直播间付费内容监听桌面应用，基于 Wails v2 (Go + Web Frontend
 
 ### 连接状态
 - 左上角实时显示连接状态：已连接 / 重连中 / 连接失败 / 未连接
-- 基于 B站高频广播事件（`WATCHED_CHANGE`、`ONLINE_RANK_COUNT`、`ROOM_REAL_TIME_MESSAGE_UPDATE`）的心跳检测
-- 120 秒无活动自动标记为断连，blivedm-go 库的客户端连接会自动重连
+- 基于 B站高频广播事件（`WATCHED_CHANGE`、`ONLINE_RANK_COUNT`、`ROOM_REAL_TIME_MESSAGE_UPDATE`）的心跳检测，120 秒无活动自动标记为断连，blivedm-go 库的客户端连接会自动重连
 
 ### 点播模式
-- 筛选仅展示包含 BV 号的醒目留言
-- BV 号自动转为可点击链接，跳转 B站视频页面
+- 筛选仅展示包含 BV/AV 号的醒目留言
+- 自动抓取B站视频页面，展示视频封面、标题、简介和标签
+- BV/AV 号自动转为可点击链接，跳转至B站视频页面
 - 切换模式时数据互不丢失，两套数据各自保留在内存中
-- 模式切换带动画过渡
 
 ### 配置记忆
 - 直播间号和 Cookie 自动保存到 `localStorage`，下次打开应用自动恢复
@@ -65,7 +64,7 @@ lutou/
 |------|------|
 | 桌面框架 | [Wails v2](https://wails.io/) |
 | 后端 | Go + [blivedm-go v1.6.0](https://github.com/Akegarasu/blivedm-go) (B站直播 WebSocket) |
-| 前端 | Vanilla JS + HTML + CSS（无框架） |
+| 前端 | Vanilla JS + HTML + CSS |
 | 构建 | Vite (前端) + Go build (后端) |
 
 ## 开发
@@ -100,7 +99,7 @@ wails build
 - 本软件仅供 **个人学习与研究** 使用，不承担因商业化使用或再分发产生的任何责任。
 - 使用本软件须遵守所在国家/地区的法律法规、B站服务条款及知识产权要求；如有合规/安全疑虑，请 **立即停止使用并卸载**。
 - 本项目 **不采集、存储或上传** 用户的个人隐私数据，Cookie 等敏感信息仅存储在本地，不会发送至任何第三方服务器。
-- 本项目 Icon 图标由 GPT Image 2 生成，如有侵权，本项目会立即更换并回以诚挚的歉意。
+- 本项目 Icon 图标由 GPT Image 2 生成，之后会替换，替换前如有侵权，本项目会立即更换并回以诚挚的歉意。
 
 ## License
 

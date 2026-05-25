@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,9 +32,12 @@ type App struct {
 	combos         map[string]*comboState // key: batch_combo_id
 	fallbackCombos map[string]*comboState // key: uid_giftId（BatchComboId 为空时的备用追踪）
 	mu             sync.Mutex
-	connected      atomic.Bool        // 当前连接状态
-	lastBeat       atomic.Int64       // 最后一次心跳/事件时间戳（Unix 秒）
-	cancelMonitor  context.CancelFunc // 停止 connectionMonitor 的取消函数
+	connected      atomic.Bool                       // 当前连接状态
+	lastBeat       atomic.Int64                      // 最后一次心跳/事件时间戳（Unix 秒）
+	cancelMonitor  context.CancelFunc                // 停止 connectionMonitor 的取消函数
+	videoClient    *http.Client                      // 用于抓取B站视频页面
+	videoInfoCache map[string]map[string]interface{} // 视频信息缓存，key: bvid
+	videoInfoMu    sync.Mutex                        // 保护 videoInfoCache
 }
 
 // NewApp creates a new App application struct
@@ -39,6 +45,8 @@ func NewApp() *App {
 	return &App{
 		combos:         make(map[string]*comboState),
 		fallbackCombos: make(map[string]*comboState),
+		videoClient:    &http.Client{Timeout: 15 * time.Second},
+		videoInfoCache: make(map[string]map[string]interface{}),
 	}
 }
 
@@ -286,6 +294,103 @@ func (a *App) startBiliClient(roomId int, cookie string) error {
 // touchBeat 更新最后活跃时间戳
 func (a *App) touchBeat() {
 	a.lastBeat.Store(time.Now().Unix())
+}
+
+// GetVideoInfo 抓取B站视频页面，从 window.__INITIAL_STATE__ 提取标题、封面、Tags
+func (a *App) GetVideoInfo(bvId string) map[string]interface{} {
+	// 查缓存
+	a.videoInfoMu.Lock()
+	if cached, ok := a.videoInfoCache[bvId]; ok {
+		a.videoInfoMu.Unlock()
+		return cached
+	}
+	a.videoInfoMu.Unlock()
+
+	videoURL := "https://www.bilibili.com/video/" + bvId
+	req, err := http.NewRequest("GET", videoURL, nil)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Referer", "https://www.bilibili.com/")
+
+	resp, err := a.videoClient.Do(req)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	html := string(body)
+
+	result := map[string]interface{}{
+		"title": "",
+		"desc":  "",
+		"cover": "",
+		"tags":  []string{},
+	}
+
+	// 从 window.__INITIAL_STATE__ 提取所有信息
+	stateJSON := ""
+	if idx := strings.Index(html, "window.__INITIAL_STATE__="); idx != -1 {
+		start := idx + len("window.__INITIAL_STATE__=")
+		depth := 0
+		end := -1
+		for i := start; i < len(html); i++ {
+			if html[i] == '{' {
+				depth++
+			} else if html[i] == '}' {
+				depth--
+				if depth == 0 {
+					end = i + 1
+					break
+				}
+			}
+		}
+		if end > start {
+			stateJSON = html[start:end]
+		}
+	}
+	if stateJSON != "" {
+		var state map[string]interface{}
+		if json.Unmarshal([]byte(stateJSON), &state) == nil {
+			// 从 videoData 获取标题和封面（videoData 是当前视频的完整数据）
+			if videoData, ok := state["videoData"].(map[string]interface{}); ok {
+				if t, ok := videoData["title"].(string); ok {
+					result["title"] = t
+				}
+				if d, ok := videoData["desc"].(string); ok {
+					result["desc"] = d
+				}
+				if c, ok := videoData["pic"].(string); ok {
+					// B站返回的封面可能是 http://，统一转为 https:// 以匹配 /cover 代理的域名校验
+					result["cover"] = strings.Replace(c, "http://", "https://", 1)
+				}
+			}
+			// 从顶层 tags 数组提取标签名（tags 是对象数组，每个元素有 tag_name 字段）
+			if tagsArr, ok := state["tags"].([]interface{}); ok {
+				tagNames := make([]string, 0, len(tagsArr))
+				for _, item := range tagsArr {
+					if tagObj, ok := item.(map[string]interface{}); ok {
+						if name, ok := tagObj["tag_name"].(string); ok && name != "" {
+							tagNames = append(tagNames, name)
+						}
+					}
+				}
+				result["tags"] = tagNames
+			}
+		}
+	}
+
+	// 写缓存
+	a.videoInfoMu.Lock()
+	a.videoInfoCache[bvId] = result
+	a.videoInfoMu.Unlock()
+
+	return result
 }
 
 // connectionMonitor 监控连接状态，检测断连和重连

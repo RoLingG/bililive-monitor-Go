@@ -1,6 +1,6 @@
 import './style.css';
 
-import {StartListening, StopListening} from '../wailsjs/go/main/App';
+import {StartListening, StopListening, GetVideoInfo} from '../wailsjs/go/main/App';
 import {EventsOn, EventsOffAll} from '../wailsjs/runtime/runtime';
 
 // 模式管理
@@ -16,6 +16,30 @@ const giftData      = [];
 // BV 号匹配正则
 const bvRegex = /bv[a-z0-9]+/i;
 const avRegex = /av[a-z0-9]+/i;
+
+// 视频信息缓存（key: bvid, value: {title, cover, tags}）
+const videoInfoCache = {};
+
+// 从消息中提取 BV/AV 号
+function extractBvId(message) {
+    const m = (message || '').match(bvRegex) || (message || '').match(avRegex);
+    return m ? m[0] : null;
+}
+
+// 获取视频信息（带前端缓存）
+async function fetchVideoInfo(bvid) {
+    if (videoInfoCache[bvid]) return videoInfoCache[bvid];
+    try {
+        const info = await GetVideoInfo(bvid);
+        if (info && !info.error) {
+            videoInfoCache[bvid] = info;
+            return info;
+        }
+    } catch (e) {
+        console.error('获取视频信息失败:', e);
+    }
+    return null;
+}
 
 function switchMode(mode) {
     if (currentMode === mode) return;
@@ -155,6 +179,19 @@ EventsOn('superchat', (data) => {
             appendScCard(sc);
         } else if (isBv || isAv) {
             appendScCard(sc);
+            // 异步获取视频信息，获取后更新卡片
+            const bvid = extractBvId(sc.message);
+            if (bvid) {
+                fetchVideoInfo(bvid).then(info => {
+                    if (info) {
+                        sc.videoInfo = info;
+                        // 重新渲染点播列表以显示视频信息
+                        if (currentMode === 'vod') {
+                            renderScList(vodScData);
+                        }
+                    }
+                });
+            }
         }
 
     } catch (e) {
@@ -264,6 +301,7 @@ function renderScList(data) {
     }
     for (const sc of filtered) {
         const card = createScCard(sc);
+        card.classList.add('no-anim');
         list.appendChild(card);
     }
 }
@@ -357,13 +395,39 @@ function createScCard(sc) {
         card.style.backgroundColor = tierColor;
     }
 
-    const faceUrl = sc.face || '';
+    const nofaceUrl = 'https://i0.hdslb.com/bfs/face/member/noface.jpg';
+    const faceUrl = sc.face || nofaceUrl;
     const priceText = formatPrice(sc.price);
     const unameHtml = escapeHtml(sc.uname || '未知用户');
     const guardText = guardLabel(sc.guardLevel);
     const guardHtml = guardText ? `<span class="sc-guard guard-${sc.guardLevel}">${guardText}</span>` : '';
     const medalHtml = (sc.medalName && sc.medalLevel != null)
         ? `<span class="sc-medal">${escapeHtml(sc.medalName)} Lv.${sc.medalLevel}</span>` : '';
+
+    // 点播模式：视频信息区域
+    let videoHtml = '';
+    if (currentMode === 'vod' && sc.videoInfo) {
+        const vi = sc.videoInfo;
+        const vTitle = escapeHtml(vi.title || '');
+        const vDesc = escapeHtml(vi.desc|| '');
+        const vCover = vi.cover ? `/cover?url=${encodeURIComponent(vi.cover)}` : '';
+        const vLink = extractBvId(sc.message);
+        const vLinkHref = vLink ? `https://www.bilibili.com/video/${vLink}` : '';
+        let tagsHtml = '';
+        if (vi.tags && vi.tags.length > 0) {
+            tagsHtml = `<div class="vod-tags">${vi.tags.slice(0, 6).map(t => `<span class="vod-tag">${escapeHtml(t)}</span>`).join('')}</div>`;
+        }
+        videoHtml = `
+            <div class="vod-video-info">
+                ${vCover ? `<img class="vod-cover" src="${vCover}" onerror="this.style.display='none'" />` : ''}
+                <div class="vod-detail">
+                    ${vTitle ? `<a class="vod-title" href="${vLinkHref}" target="_blank" rel="noopener">${vTitle}</a>` : ''}
+                    ${vDesc ? `<div class="vod-desc">${vDesc}</div>` : ''}
+                    ${tagsHtml}
+                </div>
+            </div>
+        `;
+    }
 
     card.innerHTML = `
         <div class="sc-content">
@@ -380,6 +444,7 @@ function createScCard(sc) {
                 </div>
                 <span class="sc-price" style="color:#c9a227">¥${priceText}</span>
             </div>
+            ${videoHtml}
             <div class="sc-divider">◇ ◆ ◇</div>
             <div class="sc-message">${currentMode === 'vod' ? linkifyBv(escapeHtml(sc.message || '')) : escapeHtml(sc.message || '')}</div>
             <div class="sc-footer">${formatTime(sc.startTime)}</div>
@@ -436,11 +501,12 @@ function createGiftCard(gift) {
     card.dataset.comboId = gift.comboId;
 
     const unameHtml = escapeHtml(gift.uname || '未知用户');
+    const faceUrl = (gift.face || '').replace(/^http:\/\//, 'https://');
 
     card.innerHTML = `
         <div class="gift-content">
             <img class="gift-avatar"
-                 src="/avatar?url=${encodeURIComponent(gift.face || '')}"
+                 src="/avatar?url=${encodeURIComponent(faceUrl)}"
                  onerror="this.onerror=null;this.src='/avatar?url=${encodeURIComponent('https://i0.hdslb.com/bfs/face/member/noface.jpg')}'" />
             <span class="gift-uname">${unameHtml}</span>
             <span class="gift-detail">
@@ -683,3 +749,47 @@ function handleSearch(e) {
     renderScList(currentMode === 'vod' ? vodScData : normalScData);
 }
 window.handleSearch = handleSearch;
+
+// 临时测试：模拟含 BV 号的 SC，测试点播模式视频信息展示
+// 使用前先切换到点播模式，再调用 testVodSc()
+window.testVodSc = async function () {
+    const list = document.getElementById('scList');
+    list.innerHTML = '';
+    vodScData.length = 0;
+
+    const tests = [
+        { price: 30,  uname: '测试用户A', message: '大家帮忙点播 BV1NMLH6GEBd 感谢！', face: '' },
+        { price: 100, uname: '测试用户B', message: '这首好听 BV1BM9fB8Eds 送给大家', face: '' },
+        { price: 500, uname: '测试用户C', message: '点歌 BV1oPdABkEw8 谢谢主播！', face: '' },
+        { price: 30, uname: '测试用户D', message: '点歌 BV1q7Gd6HEuD 谢谢主播！', face: '' },
+    ];
+
+    for (const t of tests) {
+        const sc = {
+            price: t.price,
+            uname: t.uname,
+            message: t.message,
+            face: t.face,
+            startTime: Math.floor(Date.now() / 1000),
+            guardLevel: 0,
+            medalName: '',
+            medalLevel: 0,
+            backgroundImage: '',
+            backgroundColor: '',
+            messageFontColor: '',
+        };
+        vodScData.unshift(sc);
+
+        // 异步获取视频信息
+        const bvid = extractBvId(sc.message);
+        if (bvid) {
+            fetchVideoInfo(bvid).then(info => {
+                if (info) sc.videoInfo = info;
+                renderScList(vodScData);
+            });
+        }
+    }
+
+    // 先渲染一次（无视频信息），等 fetch 回来后会自动重新渲染
+    renderScList(vodScData);
+};

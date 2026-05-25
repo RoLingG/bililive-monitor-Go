@@ -34,6 +34,8 @@ func main() {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == "/avatar" {
 						avatarURL := r.URL.Query().Get("url")
+						// 统一协议：http -> https
+						avatarURL = strings.Replace(avatarURL, "http://", "https://", 1)
 						// 校验URL来源，只允许B站CDN域名，防止被当作开放代理滥用
 						if avatarURL == "" ||
 							(!strings.HasPrefix(avatarURL, "https://i0.hdslb.com/") &&
@@ -43,6 +45,36 @@ func main() {
 							return
 						}
 						req, err := http.NewRequest("GET", avatarURL, nil)
+						if err != nil {
+							http.NotFound(w, r)
+							return
+						}
+						req.Header.Set("Referer", "https://www.bilibili.com/")
+						req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+						resp, err := avatarClient.Do(req)
+						if err != nil {
+							http.NotFound(w, r)
+							return
+						}
+						defer resp.Body.Close()
+						w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+						w.Header().Set("Cache-Control", "public, max-age=3600")
+						io.Copy(w, resp.Body)
+						return
+					}
+					// 封面图代理：/cover?url=xxx，逻辑同 /avatar
+					if r.URL.Path == "/cover" {
+						coverURL := r.URL.Query().Get("url")
+						// 统一协议：http -> https
+						coverURL = strings.Replace(coverURL, "http://", "https://", 1)
+						if coverURL == "" ||
+							(!strings.HasPrefix(coverURL, "https://i0.hdslb.com/") &&
+								!strings.HasPrefix(coverURL, "https://i1.hdslb.com/") &&
+								!strings.HasPrefix(coverURL, "https://i2.hdslb.com/")) {
+							http.NotFound(w, r)
+							return
+						}
+						req, err := http.NewRequest("GET", coverURL, nil)
 						if err != nil {
 							http.NotFound(w, r)
 							return
