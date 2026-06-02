@@ -135,17 +135,83 @@ async function handleDisconnect() {
 }
 window.handleDisconnect = handleDisconnect;
 
+// 语音播报设置
+const voiceSettings = {
+    sc: true,
+    guard: true,
+    readMsg: true,
+};
+
+// 从 localStorage 恢复语音设置
+function restoreVoiceSettings() {
+    const saved = localStorage.getItem('bili_voice');
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            Object.assign(voiceSettings, parsed);
+        } catch {}
+    }
+    updateVoiceButtons();
+}
+
+function saveVoiceSettings() {
+    localStorage.setItem('bili_voice', JSON.stringify(voiceSettings));
+}
+
+function updateVoiceButtons() {
+    const scBtn = document.getElementById('toggleScVoice');
+    const guardBtn = document.getElementById('toggleGuardVoice');
+    const readMsgBtn = document.getElementById('toggleReadMsg');
+    if (scBtn) scBtn.classList.toggle('active', voiceSettings.sc);
+    if (guardBtn) guardBtn.classList.toggle('active', voiceSettings.guard);
+    if (readMsgBtn) readMsgBtn.classList.toggle('active', voiceSettings.readMsg);
+}
+
+function toggleVoice(type) {
+    voiceSettings[type] = !voiceSettings[type];
+    saveVoiceSettings();
+    updateVoiceButtons();
+}
+window.toggleVoice = toggleVoice;
+
+// TTS 语音播报
+function speak(text) {
+    if (!text) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN';
+    u.rate = 1.0;
+    u.volume = 0.6;
+    speechSynthesis.speak(u);
+}
+
+// 构建 SC 播报文案
+function buildScText(sc) {
+    const parts = [`感谢${sc.uname || '未知用户'}发送了${sc.price}元醒目留言`];
+    if (voiceSettings.readMsg && sc.message) {
+        parts.push(`${sc.message}`);
+    }
+    return parts.join('，');
+}
+
+// 构建上舰播报文案
+function buildGuardText(guard) {
+    const label = guardLabel(guard.guardLevel);
+    return `感谢${guard.username || '未知用户'}上的${label}`;
+}
+
+restoreVoiceSettings();
+
 // 本地存储：记住上次输入的 roomId 和 Cookie
 function restoreSavedInputs() {
-    const savedRoom = localStorage.getItem('lutou_roomId');
-    const savedCookie = localStorage.getItem('lutou_cookie');
+    const savedRoom = localStorage.getItem('bili_roomId');
+    const savedCookie = localStorage.getItem('bili_cookie');
     if (savedRoom) document.getElementById('inputRoomId').value = savedRoom;
     if (savedCookie) document.getElementById('inputCookie').value = savedCookie;
 }
 
 function saveInputs() {
-    localStorage.setItem('lutou_roomId', document.getElementById('inputRoomId').value);
-    localStorage.setItem('lutou_cookie', document.getElementById('inputCookie').value);
+    localStorage.setItem('bili_roomId', document.getElementById('inputRoomId').value);
+    localStorage.setItem('bili_cookie', document.getElementById('inputCookie').value);
 }
 
 document.getElementById('inputRoomId').addEventListener('input', saveInputs);
@@ -160,6 +226,11 @@ EventsOn('superchat', (data) => {
         const sc = JSON.parse(data);
         const isBv = bvRegex.test(sc.message || '');
         const isAv = avRegex.test(sc.message || '');
+
+        // 语音播报
+        if (voiceSettings.sc) {
+            speak(buildScText(sc));
+        }
 
         // 始终存入正常模式数据
         normalScData.unshift(sc);
@@ -204,6 +275,11 @@ EventsOn('guard', (data) => {
         const guard = JSON.parse(data);
         guardData.unshift(guard);
         if (guardData.length > MAX_ITEMS) guardData.pop();
+
+        // 语音播报
+        if (voiceSettings.guard) {
+            speak(buildGuardText(guard));
+        }
 
         if (currentMode === 'normal') {
             appendGuardCard(guard);
@@ -471,7 +547,7 @@ function createGuardCard(guard) {
 
     const unameHtml = escapeHtml(guard.username || '未知用户');
     const label     = guardLabel(guard.guardLevel);
-    const priceText = formatPrice(guard.price / 100); // 电池转 RMB：100 电池 = 1 RMB
+    const priceText = formatPrice(guard.price / 1000);
 
     card.innerHTML = `
         <div class="guard-content">

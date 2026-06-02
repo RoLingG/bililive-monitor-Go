@@ -14,7 +14,7 @@
     --text-dim:    #6b7a6e;
     --text-muted:  #3a8a50;
     --divider: rgba(30, 131, 104, 0.44);
-    --serif:       'Playfair Display', 'LXGW WenKai', 'Georgia', serif;
+    --serif:       'Noto Serif SC', 'LXGW WenKai', 'Georgia', serif;
     --sans:        'LXGW WenKai', -apple-system, 'Segoe UI', sans-serif;
     --danger:      #c0392b;
     --danger-dim:  rgba(192, 57, 43, 0.15);
@@ -38,6 +38,7 @@ body {
 
 /* 标题区域 */
 .title-area {
+    margin-top: 20px;
     text-align: center;
     padding: 30px 20px 0;
     position: relative;
@@ -463,6 +464,7 @@ body {
 }
 .sc-price {
     margin-left: auto;
+    margin-top: -20px;
     font-size: 18px;
     font-weight: 900;
     color: var(--amber);
@@ -582,11 +584,20 @@ body {
     50%      { opacity: 0.5; }
 }
 
+/* 顶部工具栏 */
+.monitor-toolbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+    z-index: 100;
+}
+
 /* 连接状态 */
 .connection-status {
-    position: absolute;
-    top: 12px;
-    left: 20px;
     font-family: var(--serif);
     font-size: 12px;
     letter-spacing: 1px;
@@ -597,12 +608,49 @@ body {
 .status-disconnected { color: var(--text-dim); }
 .status-reconnecting { color: #ff9800; animation: livePulse 2s ease-in-out infinite; }
 
-/* 断开连接按钮 */
-.disconnect-btn {
+/* 语音播报开关 */
+.voice-toggles {
     position: absolute;
     top: 12px;
-    right: 20px;
-    z-index: 100;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 0;
+}
+.voice-toggle {
+    padding: 3px 10px;
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    border: 1px solid rgba(107,122,110,0.2);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+.voice-toggle:first-child {
+    border-radius: 2px 0 0 2px;
+    border-right: none;
+}
+.voice-toggle:last-child {
+    border-radius: 0 2px 2px 0;
+}
+.voice-toggle.active {
+    background: rgba(45, 212, 168, 0.12);
+    color: var(--teal);
+    border-color: rgba(45, 212, 168, 0.25);
+}
+.voice-toggle:hover:not(.active) {
+    color: var(--text-main);
+    border-color: rgba(107,122,110,0.35);
+}
+
+/* 断开连接按钮 */
+.disconnect-btn {
+    margin-left: auto;
+    flex-shrink: 0;
     font-family: var(--serif);
     font-size: 11px;
     letter-spacing: 1px;
@@ -622,7 +670,7 @@ body {
 /* SC 搜索框 */
 .sc-search {
     margin-left: 0px;
-    width: 120px;
+    width: 110px;
     padding: 3px 8px;
     font-family: var(--sans);
     font-size: 11px;
@@ -852,7 +900,7 @@ body {
 }
 .gift-count {
     font-family: var(--serif);
-    font-size: 16px;
+    font-size: 13px;
     font-weight: 900;
     color: #e07080;
     text-shadow: 0 0 12px rgba(224,112,128,0.3);
@@ -879,7 +927,7 @@ body {
     100% { transform: scale(1); }
 }
 
-/* 右栏列表紧凑间距（已改用 card margin） */
+/* 右栏列表紧凑间距 */
 .guard-list { }
 .gift-list  { }
 

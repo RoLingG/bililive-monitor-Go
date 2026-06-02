@@ -103,8 +103,15 @@
             </div>
         </div>
     </div>
-    <span class="connection-status status-disconnected" id="connectionStatus">● 未连接</span>
-    <button class="disconnect-btn" onclick="handleDisconnect()">断开连接</button>
+    <div class="monitor-toolbar">
+        <span class="connection-status status-disconnected" id="connectionStatus">● 未连接</span>
+        <div class="voice-toggles">
+            <button class="voice-toggle active" id="toggleScVoice" onclick="toggleVoice('sc')">🔊 SC</button>
+            <button class="voice-toggle active" id="toggleGuardVoice" onclick="toggleVoice('guard')">🔊 上舰</button>
+            <button class="voice-toggle active" id="toggleReadMsg" onclick="toggleVoice('readMsg')">💬 留言</button>
+        </div>
+        <button class="disconnect-btn" onclick="handleDisconnect()">断开连接</button>
+    </div>
 </div>
 <script type="module" src="/src/main.js"></script>
 </body>
