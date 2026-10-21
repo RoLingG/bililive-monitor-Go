@@ -1,6 +1,6 @@
 module changeme
 
-go 1.26
+go 1.27.3
 
 require (
 	github.com/Akegarasu/blivedm-go v1.6.0
@@ -42,5 +42,3 @@ require (
 	golang.org/x/text v0.22.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
-
-// replace github.com/wailsapp/wails/v2 v2.11.0 => D:\GoLand\pkg\mod
